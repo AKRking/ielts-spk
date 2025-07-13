@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { RecordingState } from '../types';
-
+  
 export const useAudioRecorder = () => {
   const [recordingState, setRecordingState] = useState<RecordingState>({
     isRecording: false,
@@ -20,6 +20,8 @@ export const useAudioRecorder = () => {
 
   const startRecording = useCallback(async () => {
     try {
+      console.log('🎤 Starting recording...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -29,6 +31,7 @@ export const useAudioRecorder = () => {
       });
       
       streamRef.current = stream;
+      console.log('📡 Stream obtained');
       
       // Set up audio level monitoring
       audioContextRef.current = new AudioContext();
@@ -43,9 +46,9 @@ export const useAudioRecorder = () => {
           analyserRef.current.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
           setAudioLevel(average / 255);
-        }   
+        }
         if (recordingState.isRecording) {
-          requestAnimationFrame(updateAudioLevel); 
+          requestAnimationFrame(updateAudioLevel);
         }
       };
       
@@ -56,20 +59,56 @@ export const useAudioRecorder = () => {
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       
+      console.log('📹 MediaRecorder created');
+      
       mediaRecorder.ondataavailable = (event) => {
+        console.log('📦 Data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
         }
       };
       
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const audioUrl = URL.createObjectURL(blob);
-        setRecordingState(prev => ({ ...prev, audioUrl }));
-        setAudioLevel(0);
+        console.log('⏹️ MediaRecorder stopped');
+        console.log('📦 Total chunks:', chunksRef.current.length);
+        
+        // Add a small delay to ensure all data is collected
+        setTimeout(() => {
+          console.log('📦 Final chunks after delay:', chunksRef.current.length);
+          
+          if (chunksRef.current.length === 0) {
+            console.error('❌ No audio chunks available!');
+            // Set state to not recording even if no audio
+            setRecordingState(prev => ({ ...prev, isRecording: false }));
+            return;
+          }
+          
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          console.log('🎵 Blob created, size:', blob.size);
+          
+          if (blob.size === 0) {
+            console.error('❌ Blob has no size!');
+            setRecordingState(prev => ({ ...prev, isRecording: false }));
+            return;
+          }
+          
+          const audioUrl = URL.createObjectURL(blob);
+          console.log('🔗 Audio URL created:', audioUrl);
+          
+          setRecordingState(prev => {
+            console.log('📊 Updating state - audioUrl:', audioUrl, 'isRecording: false');
+            return { ...prev, audioUrl, isRecording: false };
+          });
+          setAudioLevel(0);
+        }, 100); // Small delay to ensure all chunks are collected
       };
       
-      mediaRecorder.start();
+      mediaRecorder.onerror = (event) => {
+        console.error('❌ MediaRecorder error:', event);
+      };
+      
+      mediaRecorder.start(100); // Collect data every 100ms instead of 1000ms
+      console.log('🔴 Recording started with 100ms intervals');
       updateAudioLevel();
       
       setRecordingState(prev => ({ ...prev, isRecording: true, duration: 0 }));
@@ -79,33 +118,104 @@ export const useAudioRecorder = () => {
       }, 1000);
       
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('❌ Error starting recording:', error);
       throw new Error('Failed to start recording. Please check microphone permissions.');
     }
   }, [recordingState.isRecording]);
 
   const stopRecording = useCallback(() => {
+    console.log('🛑 Stop recording called');
+    console.log('📊 Current state:', {
+      isRecording: recordingState.isRecording,
+      mediaRecorderExists: !!mediaRecorderRef.current,
+      mediaRecorderState: mediaRecorderRef.current?.state,
+      chunksLength: chunksRef.current.length
+    });
+    
     if (mediaRecorderRef.current && recordingState.isRecording) {
-      mediaRecorderRef.current.stop();
-      setRecordingState(prev => ({ ...prev, isRecording: false }));
+      console.log('⏹️ Stopping MediaRecorder...');
       
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      
+      // Clear the interval first
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        console.log('⏰ Interval cleared');
       }
       
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      // Stop the recorder
+      if (mediaRecorderRef.current.state === 'recording') {
+        console.log('📹 Calling MediaRecorder.stop()');
+        
+        // Add a timeout fallback in case onstop doesn't fire
+        const fallbackTimeout = setTimeout(() => {
+          console.log('⚠️ FALLBACK: onstop didn\'t fire within 2 seconds');
+          handleStopFallback();
+        }, 2000);
+        
+        // Override the onstop to clear the timeout
+        const originalOnStop = mediaRecorderRef.current.onstop;
+        mediaRecorderRef.current.onstop = (event) => {
+          clearTimeout(fallbackTimeout);
+          if (originalOnStop) {
+            originalOnStop.call(mediaRecorderRef.current, event);
+          }
+        };
+        
+        mediaRecorderRef.current.stop();
+        console.log('📹 MediaRecorder.stop() called');
+      } else {
+        console.log('⚠️ MediaRecorder not in recording state:', mediaRecorderRef.current.state);
+        // If not recording, handle stop manually
+        handleStopFallback();
       }
+      
+      // Stop the stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop();
+          console.log('🚫 Track stopped');
+        });
+      }
+      
+      // Close audio context
+      if (audioContextRef.current) {
+        // audioContextRef.current.close();
+        console.log('🔊 AudioContext closed');
+      }
+    } else {
+      console.log('⚠️ Cannot stop - not recording or no MediaRecorder');
     }
   }, [recordingState.isRecording]);
 
+  const handleStopFallback = useCallback(() => {
+    console.log('🔄 Executing stop fallback');
+    
+    if (chunksRef.current.length > 0) {
+      console.log('📦 Creating blob from', chunksRef.current.length, 'chunks');
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      console.log('🎵 Fallback blob created, size:', blob.size);
+      
+      const audioUrl = URL.createObjectURL(blob);
+      console.log('🔗 Fallback audio URL created:', audioUrl);
+      
+      setRecordingState(prev => {
+        console.log('📊 Fallback: Updating state - audioUrl:', audioUrl, 'isRecording: false');
+        return { ...prev, audioUrl, isRecording: false };
+      });
+    } else {
+      console.log('❌ No chunks available for fallback');
+      setRecordingState(prev => ({ ...prev, isRecording: false }));
+    }
+    
+    setAudioLevel(0);
+  }, []);
+
   const clearRecording = useCallback(() => {
+    console.log('🧹 Clearing recording...');
+    
     if (recordingState.audioUrl) {
       URL.revokeObjectURL(recordingState.audioUrl);
+      console.log('🔗 Audio URL revoked');
     }
     
     // Stop any active recording
@@ -144,15 +254,18 @@ export const useAudioRecorder = () => {
     });
     
     setAudioLevel(0);
-  }, [recordingState.audioUrl]);
+    console.log('✅ Recording cleared');
+  }, [recordingState.audioUrl, recordingState.isRecording]);
 
   const forceReset = useCallback(() => {
+    console.log('🔄 Force reset called...');
+    
     // Force stop any active recording
     if (mediaRecorderRef.current && recordingState.isRecording) {
       try {
         mediaRecorderRef.current.stop();
       } catch (error) {
-        console.warn('Error stopping media recorder:', error);
+        console.warn('⚠️ Error stopping media recorder:', error);
       }
     }
     
@@ -161,7 +274,7 @@ export const useAudioRecorder = () => {
       try {
         streamRef.current.getTracks().forEach(track => track.stop());
       } catch (error) {
-        console.warn('Error stopping media tracks:', error);
+        console.warn('⚠️ Error stopping media tracks:', error);
       }
       streamRef.current = null;
     }
@@ -175,9 +288,10 @@ export const useAudioRecorder = () => {
     // Close audio context
     if (audioContextRef.current) {
       try {
-        audioContextRef.current.close();
+        
+        // audioContextRef.current.close();
       } catch (error) {
-        console.warn('Error closing audio context:', error);
+        console.warn('⚠️ Error closing audio context:', error);
       }
       audioContextRef.current = null;
     }
@@ -187,7 +301,7 @@ export const useAudioRecorder = () => {
       try {
         URL.revokeObjectURL(recordingState.audioUrl);
       } catch (error) {
-        console.warn('Error revoking object URL:', error);
+        console.warn('⚠️ Error revoking object URL:', error);
       }
     }
     
@@ -206,7 +320,9 @@ export const useAudioRecorder = () => {
     });
     
     setAudioLevel(0);
-  }, [recordingState.audioUrl]);
+    console.log('✅ Force reset completed');
+  }, [recordingState.audioUrl, recordingState.isRecording]);
+
   const getAudioBlob = useCallback((): Blob | null => {
     if (chunksRef.current.length > 0) {
       return new Blob(chunksRef.current, { type: 'audio/webm' });

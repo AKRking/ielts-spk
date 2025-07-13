@@ -32,7 +32,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   useEffect(() => {
     forceReset();
     onQuestionChange?.();
-  }, [question.id, forceReset, onQuestionChange]);
+  }, [onQuestionChange]);
   const timeLimit = maxDuration || question.time_limit;
 
   // Auto-stop recording when time limit reached
@@ -62,7 +62,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   const handleSaveRecording = async () => {
     const audioBlob = getAudioBlob();
-    if (!audioBlob) return;
+    if (!audioBlob) return console.log("no audio  blob");
 
     try {
       setIsUploading(true);
