@@ -43,9 +43,9 @@ export const useAudioRecorder = () => {
           analyserRef.current.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
           setAudioLevel(average / 255);
-        }
+        }   
         if (recordingState.isRecording) {
-          requestAnimationFrame(updateAudioLevel);
+          requestAnimationFrame(updateAudioLevel); 
         }
       };
       
