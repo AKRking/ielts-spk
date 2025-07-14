@@ -3,6 +3,7 @@ import { Mic, GraduationCap, Plus } from 'lucide-react';
 import { useIELTSQuestions } from './hooks/useIELTSQuestions';
 import { useRecordingHistory } from './hooks/useRecordingHistory';
 import { QuestionDisplay } from './components/QuestionDisplay';
+import { QuestionSearch } from './components/QuestionSearch';
 import { SampleAnswer } from './components/SampleAnswer';
 import { AudioRecorder } from './components/AudioRecorder';
 import { RecordingHistory } from './components/RecordingHistory';
@@ -16,6 +17,7 @@ function App() {
   const [showBulkEntry, setShowBulkEntry] = React.useState(false);
   
   const {
+    questions,
     currentQuestion,
     currentQuestionIndex,
     totalQuestions,
@@ -91,13 +93,21 @@ function App() {
               <span className="font-medium">Audio Recording Enabled</span>
             </div>
             
-            <button
-              onClick={() => setShowBulkEntry(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Questions
-            </button>
+            <div className="flex items-center gap-4">
+              <QuestionSearch
+                questions={questions}
+                onQuestionSelect={jumpToQuestion}
+                currentQuestionId={currentQuestion?.id}
+              />
+              
+              <button
+                onClick={() => setShowBulkEntry(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Questions
+              </button>
+            </div>
           </div>
         </div>
       </header>
