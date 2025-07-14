@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Plus, Edit3 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface QuestionData {
@@ -16,7 +16,16 @@ interface BulkQuestionEntryProps {
 
 export const BulkQuestionEntry: React.FC<BulkQuestionEntryProps> = ({ onBack }) => {
   const [jsonInput, setJsonInput] = useState('');
+  const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Single question form state
+  const [singleQuestion, setSingleQuestion] = useState({
+    part: '1',
+    question: '',
+    answer: ''
+  });
+  
   const [results, setResults] = useState<{
     success: number;
     errors: string[];
@@ -67,6 +76,68 @@ export const BulkQuestionEntry: React.FC<BulkQuestionEntryProps> = ({ onBack }) 
     if (error) throw error;
     
     return data && data.length > 0 ? data[0].serial_number + 1 : 1;
+  };
+
+  const handleSingleQuestionSubmit = async () => {
+    if (!singleQuestion.question.trim() || !singleQuestion.answer.trim()) {
+      setResults({
+        success: 0,
+        errors: ['Please fill in both question and answer fields'],
+        insertedQuestions: []
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    setResults(null);
+
+    try {
+      const part = parseInt(singleQuestion.part);
+      const currentSerialNumber = await getNextSerialNumber();
+
+      const questionData = {
+        serial_number: currentSerialNumber,
+        part: part,
+        category: getCategoryFromQuestion(singleQuestion.question, part),
+        question: singleQuestion.question.trim(),
+        sample_answer: singleQuestion.answer.trim(),
+        key_vocabulary: extractKeyVocabulary(singleQuestion.answer),
+        time_limit: getTimeLimit(part)
+      };
+
+      const { data: insertedData, error } = await supabase
+        .from('ielts_questions')
+        .insert([questionData])
+        .select('serial_number, question');
+
+      if (error) throw error;
+
+      setResults({
+        success: 1,
+        errors: [],
+        insertedQuestions: [{
+          serial_number: currentSerialNumber,
+          question: singleQuestion.question.trim()
+        }]
+      });
+
+      // Clear the form after successful insertion
+      setSingleQuestion({
+        part: '1',
+        question: '',
+        answer: ''
+      });
+
+    } catch (error) {
+      console.error('Error adding question:', error);
+      setResults({
+        success: 0,
+        errors: [error instanceof Error ? error.message : 'Unknown error occurred'],
+        insertedQuestions: []
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -176,8 +247,8 @@ export const BulkQuestionEntry: React.FC<BulkQuestionEntryProps> = ({ onBack }) 
               Back to Practice
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Bulk Question Entry</h1>
-              <p className="text-gray-600">Add multiple IELTS questions at once using JSON format</p>
+              <h1 className="text-2xl font-bold text-gray-900">Add IELTS Questions</h1>
+              <p className="text-gray-600">Add single questions or multiple questions at once</p>
             </div>
           </div>
         </div>
@@ -186,60 +257,186 @@ export const BulkQuestionEntry: React.FC<BulkQuestionEntryProps> = ({ onBack }) 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          {/* Instructions */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <h2 className="font-semibold text-blue-900 mb-3">📝 Instructions</h2>
-            <div className="text-blue-800 space-y-2">
-              <p>Paste your JSON data in the format shown below. The system will automatically:</p>
-              <ul className="list-disc list-inside ml-4 space-y-1">
-                <li>Assign auto-incrementing serial numbers</li>
-                <li>Extract key vocabulary from answers</li>
-                <li>Set appropriate time limits based on part number</li>
-                <li>Categorize questions automatically</li>
-              </ul>
+          {/* Tab Navigation */}
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100">
+            <div className="border-b border-gray-200">
+              <nav className="flex space-x-8 px-6">
+                <button
+                  onClick={() => setActiveTab('single')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'single'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Edit3 className="w-4 h-4" />
+                    Single Question
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('bulk')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'bulk'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Bulk JSON Import
+                  </div>
+                </button>
+              </nav>
             </div>
           </div>
 
-          {/* Example Format */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <h3 className="font-semibold text-gray-900 mb-4">Example JSON Format:</h3>
-            <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto border">
-              <code>{exampleJson}</code>
-            </pre>
-          </div>
-
-          {/* Input Form */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <h3 className="font-semibold text-gray-900 mb-4">Enter Your JSON Data:</h3>
-            <div className="space-y-4">
-              <textarea
-                value={jsonInput}
-                onChange={(e) => setJsonInput(e.target.value)}
-                placeholder="Paste your JSON data here..."
-                className="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-              />
-              
-              <div className="flex justify-end">
-                <button
-                  onClick={handleSubmit}
-                  disabled={isProcessing || !jsonInput.trim()}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Insert Questions
-                    </>
-                  )}
-                </button>
+          {/* Instructions */}
+          {activeTab === 'single' ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h2 className="font-semibold text-blue-900 mb-3">📝 Single Question Entry</h2>
+              <div className="text-blue-800 space-y-2">
+                <p>Add individual IELTS questions using the form below. The system will automatically:</p>
+                <ul className="list-disc list-inside ml-4 space-y-1">
+                  <li>Assign the next available serial number</li>
+                  <li>Extract key vocabulary from the answer</li>
+                  <li>Set appropriate time limits based on part number</li>
+                  <li>Categorize the question automatically</li>
+                </ul>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h2 className="font-semibold text-blue-900 mb-3">📝 Bulk JSON Import</h2>
+              <div className="text-blue-800 space-y-2">
+                <p>Paste your JSON data in the format shown below. The system will automatically:</p>
+                <ul className="list-disc list-inside ml-4 space-y-1">
+                  <li>Assign auto-incrementing serial numbers</li>
+                  <li>Extract key vocabulary from answers</li>
+                  <li>Set appropriate time limits based on part number</li>
+                  <li>Categorize questions automatically</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Content based on active tab */}
+          {activeTab === 'single' ? (
+            /* Single Question Form */
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+              <h3 className="font-semibold text-gray-900 mb-6">Add New Question</h3>
+              <div className="space-y-6">
+                {/* Part Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    IELTS Part
+                  </label>
+                  <select
+                    value={singleQuestion.part}
+                    onChange={(e) => setSingleQuestion(prev => ({ ...prev, part: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="1">Part 1 - Introduction & Interview</option>
+                    <option value="2">Part 2 - Long Turn</option>
+                    <option value="3">Part 3 - Discussion</option>
+                  </select>
+                </div>
+
+                {/* Question Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Question
+                  </label>
+                  <textarea
+                    value={singleQuestion.question}
+                    onChange={(e) => setSingleQuestion(prev => ({ ...prev, question: e.target.value }))}
+                    placeholder="Enter the IELTS question here..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                  />
+                </div>
+
+                {/* Answer Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sample Answer
+                  </label>
+                  <textarea
+                    value={singleQuestion.answer}
+                    onChange={(e) => setSingleQuestion(prev => ({ ...prev, answer: e.target.value }))}
+                    placeholder="Enter a sample answer for this question..."
+                    rows={6}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                  />
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleSingleQuestionSubmit}
+                    disabled={isProcessing || !singleQuestion.question.trim() || !singleQuestion.answer.trim()}
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Adding Question...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Add Question
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Bulk JSON Import */
+            <>
+              {/* Example Format */}
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4">Example JSON Format:</h3>
+                <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto border">
+                  <code>{exampleJson}</code>
+                </pre>
+              </div>
+
+              {/* Input Form */}
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+                <h3 className="font-semibold text-gray-900 mb-4">Enter Your JSON Data:</h3>
+                <div className="space-y-4">
+                  <textarea
+                    value={jsonInput}
+                    onChange={(e) => setJsonInput(e.target.value)}
+                    placeholder="Paste your JSON data here..."
+                    className="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                  />
+                  
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSubmit}
+                      disabled={isProcessing || !jsonInput.trim()}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          Insert Questions
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Results */}
           {results && (
