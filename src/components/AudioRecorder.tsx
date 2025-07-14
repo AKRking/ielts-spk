@@ -127,11 +127,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
       <div className="space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Recording Studio</h3>
-          <p className="text-gray-600">Practice your response and save your recording</p>
-        </div>
+
 
         {/* Audio Level Indicator */}
         {recordingState.isRecording && (
