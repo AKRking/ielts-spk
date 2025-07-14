@@ -126,7 +126,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-      <div className="space-y-6">
+      <div className="space-y-1">
 
 
         {/* Audio Level Indicator */}
