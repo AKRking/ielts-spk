@@ -32,7 +32,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   useEffect(() => {
     forceReset();
     onQuestionChange?.();
-  }, [question.id, forceReset, onQuestionChange]);
+  }, [ onQuestionChange]);
   const timeLimit = maxDuration || question.time_limit;
 
   // Auto-stop recording when time limit reached
